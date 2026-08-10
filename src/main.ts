@@ -11,8 +11,7 @@ import {
 } from './ui/render.ts';
 import { datenschutzHtml, helpHtml, impressumHtml, ui } from './ui/strings.ts';
 
-// The site owner replaces this with the real repository URL after publishing.
-const SOURCE_URL = 'https://github.com/';
+const SOURCE_URL = 'https://github.com/cem-rnd1/klarna-buchhaltungsbutler-konverter';
 
 interface StoredFile {
   id: number;
