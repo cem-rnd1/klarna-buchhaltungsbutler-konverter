@@ -139,7 +139,7 @@ describe('generated rows (§4.3, §4.4)', () => {
     expect(r.payouts[0].balanceCents).toBe(0);
   });
 
-  it('merges tax into the Gebühren row (§13b) and flags the payout', () => {
+  it('merges tax into the Gebühren row and flags the payout', () => {
     // fees -5,71 + tax -1,09 = -6,80; settlement 172,30 = 179,10 - 6,80
     const r = convert([
       {
@@ -158,7 +158,7 @@ describe('generated rows (§4.3, §4.4)', () => {
     expect(r.payouts[0].balanceCents).toBe(0);
   });
 
-  it('does not flag §13b when tax is 0', () => {
+  it('does not flag the tax notice when tax is 0', () => {
     const r = convert([
       {
         name: 'a.csv',

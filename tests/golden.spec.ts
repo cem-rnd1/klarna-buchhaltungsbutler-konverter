@@ -80,7 +80,7 @@ describe('golden: single samples', () => {
       expect(r.filename).toBe(filename);
       expect(r.payouts).toHaveLength(1);
       expect(r.payouts[0].balanceCents).toBe(0);
-      expect(r.payouts[0].taxMerged).toBe(true); // all samples carry Swedish tax
+      expect(r.payouts[0].taxMerged).toBe(true); // all samples carry VAT on Klarna fees
       expect(r.issues).toEqual([]);
     });
   }

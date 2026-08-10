@@ -30,7 +30,7 @@ export interface Payout {
   feeCents: number;
   commissionCents: number;
   taxCents: number;
-  /** true ⇒ §13b case: tax was merged into the Gebühren row. */
+  /** true ⇒ Klarna withheld VAT on the fees and it was merged into the Gebühren row (§4.4). */
   taxMerged: boolean;
   /** Number of kept transaction rows (after dropping FEE/COMMISSION). */
   transactionCount: number;

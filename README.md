@@ -20,8 +20,8 @@ Buchungen bitte prüfen.
   „Kommissionen“, „Auszahlung“) aus dem Zusammenfassungsbereich ersetzt.
 - Optional: Shopify-Bestellexport zusätzlich ablegen – zugeordnete Zeilen zeigen dann
   Kundenname und Bestellnummer statt der Klarna-Zahlungs-ID.
-- §13b-Fall (schwedische Steuer ohne USt-ID): Steuerbetrag wird automatisch den Gebühren
-  zugerechnet, mit deutlichem Hinweis.
+- Umsatzsteuer auf Klarna-Gebühren (`total_tax_amount`): Steuerbetrag wird automatisch den
+  Gebühren zugerechnet, mit deutlichem Hinweis zur Verbuchung.
 - Sicherheitsnetz: Pro Auszahlung müssen sich alle Zeilen exakt auf 0,00 € saldieren,
   sonst wird der Download blockiert (mit explizitem Override).
 

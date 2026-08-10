@@ -108,16 +108,16 @@ export const ui = {
   cardReference: 'Zahlungsreferenz',
   cardSettlement: 'Auszahlungsbetrag',
   cardFees: 'Gebühren',
-  cardFeesWithTax: 'Gebühren (inkl. Steuer, §13b)',
+  cardFeesWithTax: 'Gebühren (inkl. USt)',
   cardCommission: 'Kommissionen',
   cardTransactions: 'Transaktionen',
   cardBalance: 'Summenprüfung',
   balanceOk: '✓ 0,00 €',
   balanceFail: (diff: string) => `✗ Differenz ${diff}`,
 
-  taxNoticeTitle: 'Hinweis: Schwedische Steuer ohne USt-ID (§13b UStG)',
+  taxNoticeTitle: 'Hinweis: Umsatzsteuer auf Klarna-Gebühren',
   taxNotice: (refs: string) =>
-    `Dieser Bericht enthält von Klarna einbehaltene schwedische Steuern (total_tax_amount), weil Klarna keine USt-ID hinterlegt hat (betroffen: ${refs}). Der Steuerbetrag wurde den Gebühren zugerechnet. Die Gebührenzeile muss in der Buchhaltung nach §13b UStG verbucht werden. Tipp: Hinterlegen Sie Ihre USt-ID im Klarna-Händlerportal, damit dieser Abzug künftig entfällt.`,
+    `Dieser Bericht enthält von Klarna einbehaltene Umsatzsteuer auf die Servicegebühren (total_tax_amount) – bei deutschen Händlern in der Regel 19 % deutsche USt, auch wenn eine USt-ID im Händlerportal hinterlegt ist (betroffen: ${refs}). Für den Import wurde der Steuerbetrag der Gebührenzeile zugeschlagen. Weist die Klarna-Rechnung (PDF-Abrechnungsbericht im Händlerportal) deutsche USt aus, ist der Betrag in der Regel als abziehbare Vorsteuer zu verbuchen – nicht nach §13b UStG; Reverse Charge käme nur in Betracht, wenn Klarna keine USt berechnet. Bitte stimmen Sie die Verbuchung mit Ihrem Steuerberater ab.`,
 
   warningsHeading: 'Warnungen',
   errorsHeading: 'Fehler',
@@ -258,13 +258,24 @@ export const helpHtml = {
   faq: `
     <h3 id="faq">FAQ</h3>
     <details>
-      <summary>Was bedeutet der §13b-Hinweis (schwedische Steuer)?</summary>
+      <summary>Was bedeutet der Hinweis zur Umsatzsteuer auf Klarna-Gebühren?</summary>
       <p>
-        Wenn bei Klarna keine USt-ID hinterlegt ist, behandelt Klarna den Händler als Privatverkäufer
-        und führt schwedische Steuern ab (Spalte <code>total_tax_amount</code>). Dieses Tool rechnet
-        den Steuerbetrag automatisch den Gebühren zu – die Gebührenzeile muss dann in der Buchhaltung
-        nach <strong>§13b UStG</strong> verbucht werden. Tipp: USt-ID im Klarna-Händlerportal
-        hinterlegen, dann entfällt der Abzug künftig.
+        Klarna behält auf seine Servicegebühren Umsatzsteuer ein (Spalte
+        <code>total_tax_amount</code>) – bei deutschen Händlern in der Regel <strong>19&nbsp;%
+        deutsche USt</strong>, auch dann, wenn im Klarna-Händlerportal eine USt-ID hinterlegt ist.
+        Dieses Tool rechnet den Steuerbetrag automatisch der Gebührenzeile zu.
+      </p>
+      <p>
+        Weist die Klarna-Rechnung (PDF-Abrechnungsbericht im Händlerportal) deutsche USt aus, ist
+        der Betrag in der Regel als <strong>abziehbare Vorsteuer</strong> zu verbuchen – nicht nach
+        §13b&nbsp;UStG. Reverse Charge nach §13b käme nur in Betracht, wenn Klarna keine USt
+        berechnet; auf bereits einbehaltene USt zusätzlich §13b anzuwenden, würde die Steuer doppelt
+        erfassen. Bitte stimmen Sie die Verbuchung mit Ihrem Steuerberater ab.
+      </p>
+      <p>
+        Ältere Anleitungen – auch die Importanleitung von BuchhaltungsButler – beschreiben diesen
+        Betrag als „schwedische Steuer ohne USt-ID, nach §13b zu verbuchen“. Das ist überholt: Es
+        handelt sich um deutsche Umsatzsteuer, und sie wird auch mit hinterlegter USt-ID berechnet.
       </p>
     </details>
     <details>
