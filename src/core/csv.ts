@@ -1,12 +1,13 @@
-// RFC-4180-ish CSV parser and serializer for the semicolon dialect.
+// RFC-4180-ish CSV parser and serializer. Klarna reports use the semicolon
+// dialect; Shopify order exports are comma-separated, hence the `sep` parameter.
 
 const SEP = ';';
 
 /**
- * Parse semicolon-separated CSV. Handles double-quoted fields, `""` escapes,
- * semicolons and line breaks inside quotes, and CRLF/LF endings.
+ * Parse separated CSV (semicolon by default). Handles double-quoted fields,
+ * `""` escapes, separators and line breaks inside quotes, and CRLF/LF endings.
  */
-export function parseCsv(text: string): string[][] {
+export function parseCsv(text: string, sep: string = SEP): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
   let field = '';
@@ -41,7 +42,7 @@ export function parseCsv(text: string): string[][] {
     } else if (ch === '"' && field === '') {
       inQuotes = true;
       i++;
-    } else if (ch === SEP) {
+    } else if (ch === sep) {
       endField();
       i++;
     } else if (ch === '\r' && text[i + 1] === '\n') {

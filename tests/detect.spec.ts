@@ -2,10 +2,31 @@ import { describe, expect, it } from 'vitest';
 import {
   decodeCsvBytes,
   detectDecimalSep,
+  detectDelimiter,
   normalizeDate,
   splitSections,
   toIsoDate,
 } from '../src/core/detect.ts';
+
+describe('detectDelimiter', () => {
+  it('detects the comma of a Shopify export', () => {
+    expect(detectDelimiter('Name,Email,Billing Name\nSH-1,a@b.invalid,Anna\n')).toBe(',');
+  });
+
+  it('detects semicolons after a re-save in a German Excel', () => {
+    expect(detectDelimiter('Name;Email;Billing Name\r\nSH-1;a@b.invalid;Anna\r\n')).toBe(';');
+  });
+
+  it('ignores separators inside quoted header fields', () => {
+    expect(detectDelimiter('"Name;A";"Name;B";"Name;C"\n')).toBe(';');
+    expect(detectDelimiter('"a,b";"c,d"\n')).toBe(';');
+  });
+
+  it('only judges the first non-empty line and defaults to semicolon', () => {
+    expect(detectDelimiter('\r\nName;Ort\r\nSH-1,x,y,z\r\n')).toBe(';');
+    expect(detectDelimiter('Name\n')).toBe(';');
+  });
+});
 
 describe('decodeCsvBytes', () => {
   it('decodes UTF-8 and strips the BOM', () => {

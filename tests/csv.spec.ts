@@ -13,6 +13,15 @@ describe('parseCsv', () => {
     expect(parseCsv('"a;b";"c"')).toEqual([['a;b', 'c']]);
   });
 
+  it('parses comma-separated input when told to (Shopify exports)', () => {
+    expect(parseCsv('a,b\r\n"c,1",d', ',')).toEqual([
+      ['a', 'b'],
+      ['c,1', 'd'],
+    ]);
+    // The other separator is then just content.
+    expect(parseCsv('a;b,c', ',')).toEqual([['a;b', 'c']]);
+  });
+
   it('unescapes "" inside quoted fields', () => {
     expect(parseCsv('"say ""hi""";"x"')).toEqual([['say "hi"', 'x']]);
   });

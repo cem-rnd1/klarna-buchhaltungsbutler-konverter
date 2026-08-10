@@ -57,6 +57,15 @@ export const issueMessages = {
 
   missing_optional_column: (p: { column: string; effect: string }) =>
     `Optionale Spalte „${p.column}“ fehlt – ${p.effect}.`,
+
+  shopify_unmatched: (p: { count: number; total: number }) =>
+    `${p.count} von ${p.total} Transaktionszeile(n) konnten keiner Shopify-Bestellung zugeordnet werden – dort bleiben Buchungstext und Empfänger/Zahlungspflichtiger wie von Klarna geliefert. Häufigste Ursache: Der Bestellexport deckt einen anderen Zeitraum ab als der Klarna-Bericht.`,
+
+  shopify_unusable_file: () =>
+    'Diese Datei sieht nicht wie ein Shopify-Bestellexport aus – es fehlen die Spalte „Name“ und/oder die Zahlungsreferenz-Spalten („Payment Reference“, „Payment ID“, „Payment References“). Die Datei wird für die Zuordnung ignoriert.',
+
+  shopify_missing_billing_column: () =>
+    'Im Shopify-Bestellexport fehlt die Spalte „Billing Name“ – zugeordnete Zeilen erhalten nur die Bestellnummer als Buchungstext, der Empfänger bleibt unverändert.',
 } as const;
 
 export type IssueCode = keyof typeof issueMessages;
@@ -82,6 +91,13 @@ export const ui = {
 
   dropzoneTitle: 'Klarna-Abrechnungsberichte (CSV) hier ablegen',
   dropzoneHint: 'oder klicken, um Dateien auszuwählen – mehrere Dateien möglich',
+
+  shopifyDropzoneTitle: 'Shopify-Bestellexport (optional) hier ablegen',
+  shopifyDropzoneHint:
+    'Ersetzt die kryptische Klarna-Zahlungs-ID durch Kundenname und Bestellnummer – ohne diese Datei bleibt alles wie bisher.',
+  shopifyDropzoneHelp: 'Wie exportiere ich diese Datei aus Shopify?',
+  shopifyFilesHeading: 'Shopify-Bestellexporte',
+  shopifyOrderCount: (n: number) => (n === 1 ? '1 Bestellung' : `${n} Bestellungen`),
 
   filesHeading: 'Dateien',
   removeFile: 'Entfernen',
@@ -182,6 +198,32 @@ export const helpHtml = {
         <strong>CSV</strong> in der Spalte „Download“.
       </li>
     </ol>`,
+
+  shopifyExport: `
+    <h3 id="hilfe-shopify">Shopify-Bestellexport (optional)</h3>
+    <p>
+      Bei Shopify-Zahlungen über Klarna steht in der Klarna-Referenz nur eine Zahlungs-ID
+      (z.&nbsp;B. <code>gid://shopify/PaymentSession/rN6NG…</code>). Legen Sie zusätzlich einen
+      Shopify-Bestellexport ab, trägt das Tool stattdessen den <strong>Kundennamen</strong>
+      (Empfänger/Zahlungspflichtiger) und die <strong>Bestellnummer</strong> (Buchungstext) ein.
+    </p>
+    <ol>
+      <li>Im Shopify-Adminbereich: <strong>Bestellungen&nbsp;→&nbsp;Exportieren</strong>.</li>
+      <li>
+        Zeitraum passend zum Klarna-Bericht wählen (z.&nbsp;B. „Bestellungen nach Datum“) und
+        <strong>CSV für Excel, Numbers und andere Tabellenprogramme</strong> exportieren.
+      </li>
+      <li>
+        Die benötigten Spalten (<code>Name</code>, <code>Billing Name</code>,
+        <code>Payment Reference</code> bzw. <code>Payment ID</code>) sind im Standardexport
+        enthalten – zusätzliche Spalten stören nicht.
+      </li>
+      <li>Mehrere Exportdateien sind möglich; sie werden zu einer Nachschlagetabelle zusammengefasst.</li>
+    </ol>
+    <p>
+      Auch diese Datei verlässt Ihren Browser nicht – sie wird ausschließlich lokal gelesen.
+      Zeilen ohne passende Bestellung bleiben unverändert; das Tool weist Sie darauf hin.
+    </p>`,
 
   importGuide: `
     <ol>

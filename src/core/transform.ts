@@ -4,6 +4,12 @@ import { serializeCsv } from './csv.ts';
 import { toIsoDate } from './detect.ts';
 import { formatCents } from './money.ts';
 import { parseSettlementFile, type SettlementFile, type SummaryRow, type TransactionRow } from './parse.ts';
+import {
+  buildShopifyIndex,
+  lookupShopifyOrder,
+  type ShopifyFileResult,
+  type ShopifyIndex,
+} from './shopify.ts';
 import { makeIssue, validatePayout, type Issue } from './validate.ts';
 
 export interface OutputRow {
@@ -28,6 +34,8 @@ export interface Payout {
   taxMerged: boolean;
   /** Number of kept transaction rows (after dropping FEE/COMMISSION). */
   transactionCount: number;
+  /** Kept rows without a Shopify match (§4.5); 0 without a Shopify export. */
+  shopifyUnmatched: number;
   outputRows: OutputRow[];
   balanceCents: number;
   issues: Issue[];
@@ -51,6 +59,7 @@ function transformPayout(
   summary: SummaryRow,
   transactions: TransactionRow[],
   fileName: string,
+  shopify?: ShopifyIndex,
 ): Payout {
   const issues: Issue[] = [];
   const scope = { fileName, paymentReference: summary.paymentReference };
@@ -69,17 +78,29 @@ function transformPayout(
     issues.push(makeIssue('info', 'unknown_type', { type, lines: lines.join(', ') }, scope));
   }
 
-  const outputRows: OutputRow[] = kept.map((t) => ({
-    datum: t.payoutDate,
-    auftragsart: t.type,
-    zahlungsreferenz: t.paymentReference,
-    buchungstext: t.orderId,
-    empfaenger: t.merchantReference1,
-    betragCents: NEGATED_TYPES.has(t.type.toUpperCase())
-      ? -Math.abs(t.amountCents)
-      : t.amountCents,
-    waehrung: t.postingCurrency,
-  }));
+  // §4.5: with a Shopify export loaded, matched rows show the customer name and
+  // the Shopify order number instead of the payment-session id. A matched order
+  // without a billing name keeps the Klarna value rather than blanking it.
+  const matching = shopify !== undefined && shopify.size > 0;
+  let shopifyUnmatched = 0;
+
+  const outputRows: OutputRow[] = kept.map((t) => {
+    const match = matching
+      ? lookupShopifyOrder(shopify, t.merchantReference1, t.merchantReference2)
+      : undefined;
+    if (matching && match === undefined) shopifyUnmatched++;
+    return {
+      datum: t.payoutDate,
+      auftragsart: t.type,
+      zahlungsreferenz: t.paymentReference,
+      buchungstext: match?.orderName || t.orderId,
+      empfaenger: match?.billingName || t.merchantReference1,
+      betragCents: NEGATED_TYPES.has(t.type.toUpperCase())
+        ? -Math.abs(t.amountCents)
+        : t.amountCents,
+      waehrung: t.postingCurrency,
+    };
+  });
 
   const generated = (auftragsart: string, empfaenger: string, betragCents: number): OutputRow => ({
     datum: summary.payoutDate,
@@ -111,6 +132,7 @@ function transformPayout(
     taxCents: summary.taxCents,
     taxMerged: summary.taxCents !== 0,
     transactionCount: kept.length,
+    shopifyUnmatched,
     outputRows,
     balanceCents: outputRows.reduce((sum, r) => sum + r.betragCents, 0),
     issues,
@@ -118,7 +140,10 @@ function transformPayout(
 }
 
 /** Apply §4 to one parsed file: one Payout per summary row. */
-export function transformFile(file: SettlementFile): { payouts: Payout[]; issues: Issue[] } {
+export function transformFile(
+  file: SettlementFile,
+  shopify?: ShopifyIndex,
+): { payouts: Payout[]; issues: Issue[] } {
   const issues: Issue[] = [];
   const refs = new Set(file.payouts.map((p) => p.paymentReference));
 
@@ -140,6 +165,7 @@ export function transformFile(file: SettlementFile): { payouts: Payout[]; issues
       summary,
       file.transactions.filter((t) => t.paymentReference === summary.paymentReference),
       file.fileName,
+      shopify,
     ),
   );
   return { payouts, issues };
@@ -189,6 +215,8 @@ export interface FileResult {
 
 export interface ConversionResult {
   files: FileResult[];
+  /** One entry per added Shopify order export (§3.5); empty without them. */
+  shopifyFiles: ShopifyFileResult[];
   /** Accepted payouts, merged and sorted (§5). */
   payouts: Payout[];
   /** Every issue: file-level, transform-level, merge-level, accepted-payout-level. */
@@ -197,22 +225,39 @@ export interface ConversionResult {
   filename: string;
 }
 
-/** The whole pipeline: bytes per file -> merged, validated conversion result. */
-export function convertFiles(inputs: { fileName: string; bytes: Uint8Array }[]): ConversionResult {
+/**
+ * The whole pipeline: bytes per file -> merged, validated conversion result.
+ * Shopify order exports are optional (§4.5); without them nothing changes.
+ */
+export function convertFiles(
+  inputs: { fileName: string; bytes: Uint8Array }[],
+  shopifyInputs: { fileName: string; bytes: Uint8Array }[] = [],
+): ConversionResult {
   const issues: Issue[] = [];
+  const shopify = buildShopifyIndex(shopifyInputs);
+  issues.push(...shopify.issues);
+
   const files: FileResult[] = inputs.map(({ fileName, bytes }) => {
     const file = parseSettlementFile(bytes, fileName);
     issues.push(...file.issues);
     if (!file.ok) return { file, payouts: [] };
-    const t = transformFile(file);
+    const t = transformFile(file, shopify.index);
     issues.push(...t.issues);
     return { file, payouts: t.payouts };
   });
   const merged = mergePayouts(files.map((f) => ({ fileName: f.file.fileName, payouts: f.payouts })));
   issues.push(...merged.issues);
   for (const p of merged.payouts) issues.push(...p.issues);
+
+  // One info notice for all rows that stayed unmatched (§4.5) — never blocking.
+  const unmatched = merged.payouts.reduce((sum, p) => sum + p.shopifyUnmatched, 0);
+  if (unmatched > 0) {
+    const total = merged.payouts.reduce((sum, p) => sum + p.transactionCount, 0);
+    issues.push(makeIssue('info', 'shopify_unmatched', { count: unmatched, total }));
+  }
+
   const { csv, filename } = buildOutput(merged.payouts);
-  return { files, payouts: merged.payouts, issues, csv, filename };
+  return { files, shopifyFiles: shopify.files, payouts: merged.payouts, issues, csv, filename };
 }
 
 /** §7: build the final CSV (BOM + all fields quoted + CRLF) and its filename. */

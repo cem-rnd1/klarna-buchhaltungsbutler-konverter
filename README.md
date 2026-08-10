@@ -18,6 +18,8 @@ Buchungen bitte prüfen.
   Encoding, Dezimaltrennzeichen und Datumsformat.
 - FEE-/COMMISSION-Einzelzeilen werden entfernt und durch Sammelzeilen („Gebühren“,
   „Kommissionen“, „Auszahlung“) aus dem Zusammenfassungsbereich ersetzt.
+- Optional: Shopify-Bestellexport zusätzlich ablegen – zugeordnete Zeilen zeigen dann
+  Kundenname und Bestellnummer statt der Klarna-Zahlungs-ID.
 - §13b-Fall (schwedische Steuer ohne USt-ID): Steuerbetrag wird automatisch den Gebühren
   zugerechnet, mit deutlichem Hinweis.
 - Sicherheitsnetz: Pro Auszahlung müssen sich alle Zeilen exakt auf 0,00 € saldieren,

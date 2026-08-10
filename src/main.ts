@@ -7,6 +7,7 @@ import {
   renderIssuesPanel,
   renderPayoutCards,
   renderPreview,
+  renderShopifyFileList,
   renderTaxNotice,
 } from './ui/render.ts';
 import { datenschutzHtml, helpHtml, impressumHtml, ui } from './ui/strings.ts';
@@ -20,6 +21,7 @@ interface StoredFile {
 }
 
 let storedFiles: StoredFile[] = [];
+let storedShopifyFiles: StoredFile[] = [];
 let overrideChecked = false;
 let importHintVisible = false;
 let nextId = 1;
@@ -41,6 +43,18 @@ app.innerHTML = `
         <span>${ui.dropzoneHint}</span>
         <input type="file" id="file-input" multiple accept=".csv,text/csv" />
       </label>
+    </section>
+    <section id="sec-shopify">
+      <label class="dropzone optional" id="shopify-dropzone">
+        <strong>${ui.shopifyDropzoneTitle}</strong>
+        <span>${ui.shopifyDropzoneHint}</span>
+        <input type="file" id="shopify-file-input" multiple accept=".csv,text/csv" />
+      </label>
+      <p class="dropzone-help"><a href="#hilfe-shopify">${ui.shopifyDropzoneHelp}</a></p>
+      <div id="sec-shopify-files" hidden>
+        <h2>${ui.shopifyFilesHeading}</h2>
+        <ul class="file-list" id="shopify-file-list"></ul>
+      </div>
     </section>
     <section id="sec-files" hidden>
       <h2>${ui.filesHeading}</h2>
@@ -72,6 +86,10 @@ app.innerHTML = `
         <details>
           <summary>Klarna-Bericht richtig konfigurieren</summary>
           ${helpHtml.klarnaConfig}
+        </details>
+        <details id="details-shopify">
+          <summary>Shopify-Bestellexport (optional)</summary>
+          ${helpHtml.shopifyExport}
         </details>
         <details>
           <summary>Import in BuchhaltungsButler</summary>
@@ -107,10 +125,14 @@ app.innerHTML = `
 const el = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 const dropzone = el<HTMLLabelElement>('dropzone');
 const fileInput = el<HTMLInputElement>('file-input');
+const shopifyDropzone = el<HTMLLabelElement>('shopify-dropzone');
+const shopifyFileInput = el<HTMLInputElement>('shopify-file-input');
 const downloadBtn = el<HTMLButtonElement>('download-btn');
 
+const payload = (f: StoredFile) => ({ fileName: f.fileName, bytes: f.bytes });
+
 function currentResult(): ConversionResult {
-  return convertFiles(storedFiles.map((f) => ({ fileName: f.fileName, bytes: f.bytes })));
+  return convertFiles(storedFiles.map(payload), storedShopifyFiles.map(payload));
 }
 
 function render(): void {
@@ -121,6 +143,12 @@ function render(): void {
 
   el('sec-files').hidden = !hasFiles;
   el('file-list').innerHTML = renderFileList(result, storedFiles.map((f) => f.id));
+
+  el('sec-shopify-files').hidden = storedShopifyFiles.length === 0;
+  el('shopify-file-list').innerHTML = renderShopifyFileList(
+    result.shopifyFiles,
+    storedShopifyFiles.map((f) => f.id),
+  );
 
   el('sec-payouts').hidden = !hasPayouts;
   el('payout-cards').innerHTML = renderPayoutCards(result.payouts);
@@ -141,10 +169,10 @@ function render(): void {
   el('import-hint').hidden = !importHintVisible;
 }
 
-async function addFiles(list: FileList | File[]): Promise<void> {
+async function addFiles(list: FileList | File[], target: StoredFile[]): Promise<void> {
   for (const file of Array.from(list)) {
     const bytes = new Uint8Array(await file.arrayBuffer());
-    storedFiles.push({ id: nextId++, fileName: file.name, bytes });
+    target.push({ id: nextId++, fileName: file.name, bytes });
   }
   overrideChecked = false;
   render();
@@ -152,20 +180,25 @@ async function addFiles(list: FileList | File[]): Promise<void> {
 
 // --- Dropzone events -------------------------------------------------------
 
-fileInput.addEventListener('change', () => {
-  if (fileInput.files) void addFiles(fileInput.files);
-  fileInput.value = '';
-});
-dropzone.addEventListener('dragover', (ev) => {
-  ev.preventDefault();
-  dropzone.classList.add('dragover');
-});
-dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
-dropzone.addEventListener('drop', (ev) => {
-  ev.preventDefault();
-  dropzone.classList.remove('dragover');
-  if (ev.dataTransfer?.files) void addFiles(ev.dataTransfer.files);
-});
+function wireDropzone(zone: HTMLLabelElement, input: HTMLInputElement, target: () => StoredFile[]) {
+  input.addEventListener('change', () => {
+    if (input.files) void addFiles(input.files, target());
+    input.value = '';
+  });
+  zone.addEventListener('dragover', (ev) => {
+    ev.preventDefault();
+    zone.classList.add('dragover');
+  });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', (ev) => {
+    ev.preventDefault();
+    zone.classList.remove('dragover');
+    if (ev.dataTransfer?.files) void addFiles(ev.dataTransfer.files, target());
+  });
+}
+
+wireDropzone(dropzone, fileInput, () => storedFiles);
+wireDropzone(shopifyDropzone, shopifyFileInput, () => storedShopifyFiles);
 
 // --- File list / issues / actions ------------------------------------------
 
@@ -174,6 +207,15 @@ el('file-list').addEventListener('click', (ev) => {
   if (!btn) return;
   const id = Number(btn.dataset.remove);
   storedFiles = storedFiles.filter((f) => f.id !== id);
+  overrideChecked = false;
+  render();
+});
+
+el('shopify-file-list').addEventListener('click', (ev) => {
+  const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>('button[data-remove-shopify]');
+  if (!btn) return;
+  const id = Number(btn.dataset.removeShopify);
+  storedShopifyFiles = storedShopifyFiles.filter((f) => f.id !== id);
   overrideChecked = false;
   render();
 });
@@ -202,13 +244,27 @@ downloadBtn.addEventListener('click', () => {
 
 el('reset-btn').addEventListener('click', () => {
   storedFiles = [];
+  storedShopifyFiles = [];
   overrideChecked = false;
   importHintVisible = false;
   fileInput.value = '';
+  shopifyFileInput.value = '';
   render();
 });
 
 // --- Simple hash routing for Impressum / Datenschutz ------------------------
+
+/** Help anchors sit inside collapsed <details> — open them on the way there. */
+function revealAnchor(hash: string): void {
+  const target = hash.length > 1 ? document.getElementById(hash.slice(1)) : null;
+  if (!target) return;
+  let details = target.closest('details');
+  while (details) {
+    details.open = true;
+    details = details.parentElement?.closest('details') ?? null;
+  }
+  target.scrollIntoView();
+}
 
 function route(): void {
   const hash = location.hash;
@@ -218,6 +274,7 @@ function route(): void {
   el('view-impressum').hidden = !impressum;
   el('view-datenschutz').hidden = !datenschutz;
   if (impressum || datenschutz) window.scrollTo(0, 0);
+  else revealAnchor(hash);
 }
 
 window.addEventListener('hashchange', route);
