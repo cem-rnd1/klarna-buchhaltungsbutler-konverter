@@ -2,7 +2,7 @@
 // here (§3); any file-level error empties the result and is reported as Issue.
 
 import { parseCsv } from './csv.ts';
-import { decodeCsvBytes, detectDecimalSep, normalizeDate, splitSections } from './detect.ts';
+import { decodeCsvBytes, detectDecimalSep, normalizeDate, splitBlocks } from './detect.ts';
 import { parseAmountCents, type DecimalSep } from './money.ts';
 import { makeIssue, type Issue } from './validate.ts';
 import { missingColumnEffects } from '../ui/strings.ts';
@@ -73,45 +73,49 @@ export function parseSettlementFile(bytes: Uint8Array, fileName: string): Settle
 
   try {
     const rows = parseCsv(decodeCsvBytes(bytes));
-    const sections = rows.length >= 2 ? splitSections(rows) : null;
-    if (!sections) {
+    const split = rows.length >= 2 ? splitBlocks(rows) : null;
+    if (!split) {
       issues.push(makeIssue('error', 'no_transaction_section', undefined, { fileName }));
       return fail();
     }
-    if (sections.summaryValues.length === 0) {
+    // A block carries its own header rows; in the combined report (§3.1.1) they
+    // repeat per payout, so column issues are reported once per file, not per block.
+    const blocks = split.blocks.map((sections) => ({
+      sections,
+      sumMap: headerMap(sections.summaryHeader),
+      txMap: headerMap(sections.txHeader),
+    }));
+
+    if (blocks.every((b) => b.sections.summaryValues.length === 0)) {
       issues.push(makeIssue('error', 'no_payouts', undefined, { fileName }));
       return fail();
     }
 
-    const sumMap = headerMap(sections.summaryHeader);
-    const txMap = headerMap(sections.txHeader);
+    const reported = new Set<string>();
+    const reportColumn = (severity: 'error' | 'info', col: string, section: 'summary' | 'transactions') => {
+      if (reported.has(`${section}:${col}`)) return;
+      reported.add(`${section}:${col}`);
+      issues.push(
+        severity === 'error'
+          ? makeIssue('error', 'missing_required_column', { column: col, section }, { fileName })
+          : makeIssue(
+              'info',
+              'missing_optional_column',
+              { column: col, effect: missingColumnEffects[col] },
+              { fileName },
+            ),
+      );
+    };
 
-    for (const col of REQUIRED_SUMMARY) {
-      if (!sumMap.has(col)) {
-        issues.push(makeIssue('error', 'missing_required_column', { column: col, section: 'summary' }, { fileName }));
-      }
-    }
-    for (const col of REQUIRED_TX) {
-      if (!txMap.has(col)) {
-        issues.push(
-          makeIssue('error', 'missing_required_column', { column: col, section: 'transactions' }, { fileName }),
-        );
-      }
+    for (const { sumMap, txMap } of blocks) {
+      for (const col of REQUIRED_SUMMARY) if (!sumMap.has(col)) reportColumn('error', col, 'summary');
+      for (const col of REQUIRED_TX) if (!txMap.has(col)) reportColumn('error', col, 'transactions');
     }
     if (issues.some((i) => i.severity === 'error')) return fail();
 
-    for (const col of [...OPTIONAL_SUMMARY, ...OPTIONAL_TX]) {
-      const map = OPTIONAL_SUMMARY.includes(col) ? sumMap : txMap;
-      if (!map.has(col)) {
-        issues.push(
-          makeIssue(
-            'info',
-            'missing_optional_column',
-            { column: col, effect: missingColumnEffects[col] },
-            { fileName },
-          ),
-        );
-      }
+    for (const { sumMap, txMap } of blocks) {
+      for (const col of OPTIONAL_SUMMARY) if (!sumMap.has(col)) reportColumn('info', col, 'summary');
+      for (const col of OPTIONAL_TX) if (!txMap.has(col)) reportColumn('info', col, 'transactions');
     }
 
     const get = (row: string[], map: Map<string, number>, col: string): string => {
@@ -119,17 +123,20 @@ export function parseSettlementFile(bytes: Uint8Array, fileName: string): Settle
       return idx === undefined ? '' : (row[idx] ?? '').trim();
     };
 
-    // Decimal separator detection over every amount value in the file (§3.3).
+    // Decimal separator detection over every amount value in the file (§3.3),
+    // across all blocks — the convention is a property of the file, not a block.
     const amountValues: string[] = [];
-    for (const row of sections.summaryValues) {
-      for (const col of ['total_settlement_amount', 'total_fee_amount', ...OPTIONAL_SUMMARY]) {
-        const v = get(row, sumMap, col);
+    for (const { sections, sumMap, txMap } of blocks) {
+      for (const row of sections.summaryValues) {
+        for (const col of ['total_settlement_amount', 'total_fee_amount', ...OPTIONAL_SUMMARY]) {
+          const v = get(row, sumMap, col);
+          if (v !== '') amountValues.push(v);
+        }
+      }
+      for (const row of sections.txRows) {
+        const v = get(row, txMap, 'amount');
         if (v !== '') amountValues.push(v);
       }
-    }
-    for (const row of sections.txRows) {
-      const v = get(row, txMap, 'amount');
-      if (v !== '') amountValues.push(v);
     }
     const decimalSep = detectDecimalSep(amountValues);
     if (decimalSep === 'mixed') {
@@ -148,35 +155,53 @@ export function parseSettlementFile(bytes: Uint8Array, fileName: string): Settle
       return date;
     };
 
-    const payouts: SummaryRow[] = sections.summaryValues.map((row, i) => {
-      const line = i + 2; // row 1 is the summary header
-      const optional = (col: string): number => {
-        const v = get(row, sumMap, col);
-        return v === '' ? 0 : parseAmount(v, line, decimalSep);
-      };
-      return {
-        payoutDate: parseDate(get(row, sumMap, 'payout_date'), line),
-        settlementCents: parseAmount(get(row, sumMap, 'total_settlement_amount'), line, decimalSep),
-        feeCents: parseAmount(get(row, sumMap, 'total_fee_amount'), line, decimalSep),
-        commissionCents: optional('total_commission_amount'),
-        taxCents: optional('total_tax_amount'),
-        paymentReference: get(row, sumMap, 'payment_reference'),
-      };
-    });
+    const payouts: SummaryRow[] = [];
+    const transactions: TransactionRow[] = [];
 
-    const transactions: TransactionRow[] = sections.txRows.map((row, i) => {
-      const line = sections.txRowNumbers[i];
-      return {
-        payoutDate: parseDate(get(row, txMap, 'payout_date'), line),
-        type: get(row, txMap, 'type'),
-        paymentReference: get(row, txMap, 'payment_reference'),
-        amountCents: parseAmount(get(row, txMap, 'amount'), line, decimalSep),
-        orderId: get(row, txMap, 'order_id'),
-        merchantReference1: get(row, txMap, 'merchant_reference1'),
-        postingCurrency: get(row, txMap, 'posting_currency') || 'EUR',
-        lineNumber: line,
+    for (const { sections, sumMap, txMap } of blocks) {
+      const blockPayouts: SummaryRow[] = sections.summaryValues.map((row, i) => {
+        const line = sections.summaryRowNumbers[i];
+        const optional = (col: string): number => {
+          const v = get(row, sumMap, col);
+          return v === '' ? 0 : parseAmount(v, line, decimalSep);
+        };
+        return {
+          payoutDate: parseDate(get(row, sumMap, 'payout_date'), line),
+          settlementCents: parseAmount(get(row, sumMap, 'total_settlement_amount'), line, decimalSep),
+          feeCents: parseAmount(get(row, sumMap, 'total_fee_amount'), line, decimalSep),
+          commissionCents: optional('total_commission_amount'),
+          taxCents: optional('total_tax_amount'),
+          paymentReference: get(row, sumMap, 'payment_reference'),
+        };
+      });
+
+      // §3.1.1: in the combined report the transaction rows carry no date —
+      // it comes from the summary row of their own block.
+      const blockDate = (paymentReference: string): string => {
+        const match = blockPayouts.find((p) => p.paymentReference === paymentReference);
+        if (match) return match.payoutDate;
+        return blockPayouts.length === 1 ? blockPayouts[0].payoutDate : '';
       };
-    });
+
+      for (const [i, row] of sections.txRows.entries()) {
+        const line = sections.txRowNumbers[i];
+        const paymentReference = get(row, txMap, 'payment_reference');
+        const rawDate = get(row, txMap, 'payout_date');
+        const inherited = rawDate === '' ? blockDate(paymentReference) : '';
+        transactions.push({
+          payoutDate: inherited !== '' ? inherited : parseDate(rawDate, line),
+          type: get(row, txMap, 'type'),
+          paymentReference,
+          amountCents: parseAmount(get(row, txMap, 'amount'), line, decimalSep),
+          orderId: get(row, txMap, 'order_id'),
+          merchantReference1: get(row, txMap, 'merchant_reference1'),
+          postingCurrency: get(row, txMap, 'posting_currency') || 'EUR',
+          lineNumber: line,
+        });
+      }
+
+      payouts.push(...blockPayouts);
+    }
 
     return { fileName, payouts, transactions, issues, ok: true };
   } catch (e) {

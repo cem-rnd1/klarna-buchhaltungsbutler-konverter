@@ -3,6 +3,7 @@ import {
   decodeCsvBytes,
   detectDecimalSep,
   normalizeDate,
+  splitBlocks,
   splitSections,
   toIsoDate,
 } from '../src/core/detect.ts';
@@ -95,5 +96,59 @@ describe('splitSections', () => {
         ['01.01.2026', '100,00'],
       ]),
     ).toBeNull();
+  });
+});
+
+describe('splitBlocks', () => {
+  const SUMMARY = ['payout_date', 'total_settlement_amount', 'payment_reference'];
+  const TX = ['payout_date', 'type', 'payment_reference', 'amount'];
+
+  it('reads an individual report as a single block', () => {
+    const split = splitBlocks([SUMMARY, ['01.01.2026', '100,00', 'ref1'], TX, ['01.01.2026', 'SALE', 'ref1', '100,00']])!;
+    expect(split.hasOverallSummary).toBe(false);
+    expect(split.blocks).toHaveLength(1);
+    expect(split.blocks[0].summaryValues).toEqual([['01.01.2026', '100,00', 'ref1']]);
+    expect(split.blocks[0].summaryRowNumbers).toEqual([2]);
+    expect(split.blocks[0].txRowNumbers).toEqual([4]);
+  });
+
+  it('splits repeated summary + transaction sections into one block per payout', () => {
+    const split = splitBlocks([
+      SUMMARY,
+      ['01.01.2026', '100,00', 'ref1'],
+      TX,
+      ['', 'SALE', 'ref1', '100,00'],
+      ['', 'SALE', 'ref1', '50,00'],
+      SUMMARY,
+      ['02.02.2026', '20,00', 'ref2'],
+      TX,
+      ['', 'SALE', 'ref2', '20,00'],
+    ])!;
+    expect(split.blocks).toHaveLength(2);
+    expect(split.blocks[0].txRows).toHaveLength(2);
+    expect(split.blocks[0].txRowNumbers).toEqual([4, 5]);
+    expect(split.blocks[1].summaryValues).toEqual([['02.02.2026', '20,00', 'ref2']]);
+    expect(split.blocks[1].summaryRowNumbers).toEqual([7]);
+    expect(split.blocks[1].txRowNumbers).toEqual([9]);
+  });
+
+  it('recognizes and skips the leading summary_-prefixed overall section', () => {
+    const split = splitBlocks([
+      ['summary_total_settlement_amount', 'summary_payout_date_start', 'summary_payout_date_end'],
+      ['100,00', '01.01.2026', '02.02.2026'],
+      SUMMARY,
+      ['01.01.2026', '100,00', 'ref1'],
+      TX,
+      ['', 'SALE', 'ref1', '100,00'],
+    ])!;
+    expect(split.hasOverallSummary).toBe(true);
+    expect(split.blocks).toHaveLength(1);
+    expect(split.blocks[0].summaryHeader).toEqual(SUMMARY);
+    expect(split.blocks[0].summaryRowNumbers).toEqual([4]);
+  });
+
+  it('returns null when no block has a transaction list', () => {
+    expect(splitBlocks([SUMMARY, ['01.01.2026', '100,00', 'ref1']])).toBeNull();
+    expect(splitBlocks([])).toBeNull();
   });
 });

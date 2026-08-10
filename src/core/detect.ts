@@ -16,35 +16,109 @@ export function decodeCsvBytes(bytes: Uint8Array): string {
 export interface Sections {
   summaryHeader: string[];
   summaryValues: string[][];
+  /** 1-based line numbers of the summary value rows (for messages). */
+  summaryRowNumbers: number[];
   txHeader: string[];
   txRows: string[][];
   /** 1-based line numbers of the transaction rows (for messages). */
   txRowNumbers: number[];
 }
 
+export interface FileBlocks {
+  /** One block per payout section; individual reports yield exactly one. */
+  blocks: Sections[];
+  /** true ⇒ a leading `summary_`-prefixed overall section was recognized and skipped (§3.1.1). */
+  hasOverallSummary: boolean;
+}
+
+const norm = (f: string) => f.trim().toLowerCase();
+
+/** The section boundary marker of §3.1: header row of a transaction list. */
+function isTxHeader(row: string[]): boolean {
+  const names = row.map(norm);
+  return names.includes('type') && names.includes('amount');
+}
+
 /**
- * Split parsed rows into summary section and transaction list. The transaction
- * header row is the first row containing both `type` and `amount` headers.
- * Returns null if no transaction header is found or the summary is malformed.
+ * Header row of a per-payout summary section. `total_settlement_amount` may be
+ * missing (that is a missing-required-column error, not a reason to misread the
+ * row as data), hence the `payment_reference` fallback.
+ */
+function isSummaryHeader(row: string[]): boolean {
+  const names = row.map(norm);
+  return (
+    names.includes('payout_date') &&
+    (names.includes('total_settlement_amount') || names.includes('payment_reference'))
+  );
+}
+
+/** Header row of the combined report's overall summary section (§3.1.1). */
+function isOverallSummaryHeader(row: string[]): boolean {
+  const names = row.map(norm).filter((n) => n !== '');
+  return names.length > 0 && names.every((n) => n.startsWith('summary_'));
+}
+
+function isHeader(row: string[]): boolean {
+  return isTxHeader(row) || isSummaryHeader(row) || isOverallSummaryHeader(row);
+}
+
+/**
+ * Split parsed rows into payout blocks (§3.1, §3.1.1). Individual reports are
+ * the single-block case; the combined report repeats summary + transaction
+ * sections and is preceded by an overall `summary_`-prefixed section, which is
+ * recognized and skipped. Returns null if no complete block is found.
+ */
+export function splitBlocks(rows: string[][]): FileBlocks | null {
+  const blocks: Sections[] = [];
+  let hasOverallSummary = false;
+  let i = 0;
+
+  // Skip the overall summary section and its value rows, if present.
+  if (rows.length > 0 && isOverallSummaryHeader(rows[0])) {
+    hasOverallSummary = true;
+    i = 1;
+    while (i < rows.length && !isHeader(rows[i])) i++;
+  }
+
+  // The first block's summary header is simply the first row (whatever its
+  // columns are, so missing required columns stay reportable as such); every
+  // further block must announce itself with a recognizable summary header.
+  let first = true;
+
+  while (i < rows.length) {
+    if (isTxHeader(rows[i]) || (!first && !isSummaryHeader(rows[i]))) {
+      i++;
+      continue;
+    }
+    first = false;
+    const summaryHeader = rows[i];
+    const summaryStart = ++i;
+    while (i < rows.length && !isHeader(rows[i])) i++;
+    const summaryValues = rows.slice(summaryStart, i);
+    if (i >= rows.length || !isTxHeader(rows[i])) continue; // no transaction list ⇒ not a block
+    const txHeader = rows[i];
+    const txStart = ++i;
+    while (i < rows.length && !isHeader(rows[i])) i++;
+    blocks.push({
+      summaryHeader,
+      summaryValues,
+      summaryRowNumbers: summaryValues.map((_, n) => summaryStart + 1 + n),
+      txHeader,
+      txRows: rows.slice(txStart, i),
+      txRowNumbers: rows.slice(txStart, i).map((_, n) => txStart + 1 + n),
+    });
+  }
+
+  return blocks.length > 0 ? { blocks, hasOverallSummary } : null;
+}
+
+/**
+ * Single-section variant of {@link splitBlocks}: the classic individual report
+ * (one summary section followed by one transaction list).
  */
 export function splitSections(rows: string[][]): Sections | null {
-  const norm = (f: string) => f.trim().toLowerCase();
-  let txHeaderIdx = -1;
-  for (let i = 1; i < rows.length; i++) {
-    const names = rows[i].map(norm);
-    if (names.includes('type') && names.includes('amount')) {
-      txHeaderIdx = i;
-      break;
-    }
-  }
-  if (txHeaderIdx < 1) return null;
-  return {
-    summaryHeader: rows[0],
-    summaryValues: rows.slice(1, txHeaderIdx),
-    txHeader: rows[txHeaderIdx],
-    txRows: rows.slice(txHeaderIdx + 1),
-    txRowNumbers: rows.slice(txHeaderIdx + 1).map((_, i) => txHeaderIdx + 2 + i),
-  };
+  const split = splitBlocks(rows);
+  return split && split.blocks.length === 1 && !split.hasOverallSummary ? split.blocks[0] : null;
 }
 
 /**

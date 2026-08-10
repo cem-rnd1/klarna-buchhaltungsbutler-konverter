@@ -281,6 +281,118 @@ describe('multi-file handling (§5)', () => {
   });
 });
 
+describe('combined settlement report (§3.1.1)', () => {
+  const OVERALL_HEADER =
+    'summary_total_sale_amount;summary_total_fee_amount;summary_total_settlement_amount;summary_total_tax_amount;summary_settlement_currency;summary_payout_date_start;summary_payout_date_end';
+
+  // Two payout blocks, transaction rows without their own date, preceded by the
+  // overall summary section covering the whole period.
+  const combined = file([
+    OVERALL_HEADER,
+    '150,00;-8,00;142,00;0,00;EUR;01.01.2026;04.06.2026',
+    SUMMARY_HEADER,
+    '04.06.2026;95,00;-5,00;0,00;0,00;REF-A',
+    TX_HEADER,
+    ';SALE;REF-A;o1;m1;100,00;EUR',
+    ';FEE;REF-A;o1;m1;-5,00;EUR',
+    SUMMARY_HEADER,
+    '01.01.2026;47,00;-3,00;0,00;0,00;REF-B',
+    TX_HEADER,
+    ';SALE;REF-B;o2;m2;50,00;EUR',
+  ]);
+
+  it('parses every payout block and skips the overall summary section', () => {
+    const r = convert([{ name: 'combined.csv', content: combined }]);
+    expect(r.files[0].ok).toBe(true);
+    expect(r.payouts).toHaveLength(2);
+    // sorted by payout_date ascending, overall section contributes nothing
+    expect(r.payouts.map((p) => p.paymentReference)).toEqual(['REF-B', 'REF-A']);
+    expect(r.payouts.every((p) => p.balanceCents === 0)).toBe(true);
+    expect(issueCodes(r)).toEqual([]);
+    // header + REF-B (SALE, Gebühren, Auszahlung) + REF-A (SALE, Gebühren, Auszahlung);
+    // the FEE row is dropped (§4.1) and the overall summary section contributes nothing.
+    expect(rowsOf(r.csv)).toHaveLength(1 + 3 + 3);
+  });
+
+  it('gives transaction rows the payout date of their own block', () => {
+    const r = convert([{ name: 'combined.csv', content: combined }]);
+    const dates = r.payouts.flatMap((p) => p.outputRows.map((row) => row.datum));
+    expect(dates).toEqual(['01.01.2026', '01.01.2026', '01.01.2026', '04.06.2026', '04.06.2026', '04.06.2026']);
+  });
+
+  it('produces the same output as the equivalent individual reports', () => {
+    const asCombined = convert([{ name: 'combined.csv', content: combined }]);
+    const asIndividuals = convert([
+      {
+        name: 'b.csv',
+        content: file([
+          SUMMARY_HEADER,
+          '01.01.2026;47,00;-3,00;0,00;0,00;REF-B',
+          TX_HEADER,
+          '01.01.2026;SALE;REF-B;o2;m2;50,00;EUR',
+        ]),
+      },
+      {
+        name: 'a.csv',
+        content: file([
+          SUMMARY_HEADER,
+          '04.06.2026;95,00;-5,00;0,00;0,00;REF-A',
+          TX_HEADER,
+          '04.06.2026;SALE;REF-A;o1;m1;100,00;EUR',
+          '04.06.2026;FEE;REF-A;o1;m1;-5,00;EUR',
+        ]),
+      },
+    ]);
+    expect(asCombined.csv).toBe(asIndividuals.csv);
+    expect(asCombined.filename).toBe(asIndividuals.filename);
+  });
+
+  it('reports a column missing from every block only once', () => {
+    const r = convert([
+      {
+        name: 'combined.csv',
+        content: file([
+          OVERALL_HEADER,
+          '150,00;-8,00;142,00;0,00;EUR;01.01.2026;04.06.2026',
+          'payout_date;total_settlement_amount;total_fee_amount;payment_reference',
+          '04.06.2026;95,00;-5,00;REF-A',
+          TX_HEADER,
+          ';SALE;REF-A;o1;m1;100,00;EUR',
+          'payout_date;total_settlement_amount;total_fee_amount;payment_reference',
+          '01.01.2026;47,00;-3,00;REF-B',
+          TX_HEADER,
+          ';SALE;REF-B;o2;m2;50,00;EUR',
+        ]),
+      },
+    ]);
+    expect(issueCodes(r)).toEqual(['missing_optional_column', 'missing_optional_column']);
+    expect(r.issues[0].messageDe).toContain('total_commission_amount');
+    expect(r.issues[1].messageDe).toContain('total_tax_amount');
+  });
+
+  it('still detects duplicates and orphans across blocks', () => {
+    const r = convert([
+      {
+        name: 'combined.csv',
+        content: file([
+          SUMMARY_HEADER,
+          '04.06.2026;95,00;-5,00;0,00;0,00;REF-A',
+          TX_HEADER,
+          ';SALE;REF-A;o1;m1;100,00;EUR',
+          SUMMARY_HEADER,
+          '01.01.2026;95,00;-5,00;0,00;0,00;REF-A',
+          TX_HEADER,
+          ';SALE;OTHER;o2;m2;100,00;EUR',
+        ]),
+      },
+    ]);
+    expect(issueCodes(r)).toContain('orphan_transactions');
+    const dup = r.issues.find((i) => i.code === 'duplicate_payment_reference')!;
+    expect(dup.messageDe).toContain('REF-A');
+    expect(r.payouts).toHaveLength(1);
+  });
+});
+
 describe('validation (§6)', () => {
   it('reports a broken balance as blocking with the difference', () => {
     // settlement claims 90 but rows sum to 95 ⇒ difference +5,00
