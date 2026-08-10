@@ -184,7 +184,6 @@ export const helpHtml = {
     </ol>`,
 
   importGuide: `
-    <h3 id="hilfe-import">Import in BuchhaltungsButler</h3>
     <ol>
       <li>
         Einmalig: In der <strong>Kontenverwaltung</strong> ein eigenes Bankkonto

@@ -76,6 +76,7 @@ app.innerHTML = `
         </details>
         <details>
           <summary>Import in BuchhaltungsButler</summary>
+          <h3 id="hilfe-import">Import in BuchhaltungsButler</h3>
           ${helpHtml.importGuide}
         </details>
         <details>
