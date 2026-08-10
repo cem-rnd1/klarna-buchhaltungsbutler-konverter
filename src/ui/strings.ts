@@ -267,12 +267,11 @@ export const helpHtml = {
 
 export const impressumHtml = `
   <h2>Impressum</h2>
-  <p><em>[Platzhalter – vom Betreiber der Website gemäß §5 TMG/DDG auszufüllen:]</em></p>
   <p>
-    [Name des Betreibers]<br />
-    [Straße und Hausnummer]<br />
-    [PLZ und Ort]<br />
-    E-Mail: [E-Mail-Adresse]
+    Cem Altay<br />
+    Hauptstraße 46<br />
+    22967 Tremsbüttel<br />
+    E-Mail: cem@rnd1.de
   </p>`;
 
 export const datenschutzHtml = `
