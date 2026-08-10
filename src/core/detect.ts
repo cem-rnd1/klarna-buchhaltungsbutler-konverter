@@ -13,6 +13,34 @@ export function decodeCsvBytes(bytes: Uint8Array): string {
   return text.startsWith('\uFEFF') ? text.slice(1) : text;
 }
 
+/**
+ * Sniff the field separator of a foreign CSV (Shopify order exports are
+ * comma-separated, but a re-save in a German Excel turns them into semicolons).
+ * Counts both candidates on the first non-empty line, ignoring quoted parts;
+ * comma only wins when it is strictly more frequent. Klarna reports are not
+ * sniffed — their dialect is fixed by the report configuration.
+ */
+export function detectDelimiter(text: string): string {
+  let commas = 0;
+  let semicolons = 0;
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '"') {
+      inQuotes = !inQuotes;
+    } else if (inQuotes) {
+      continue;
+    } else if (ch === ',') {
+      commas++;
+    } else if (ch === ';') {
+      semicolons++;
+    } else if (ch === '\n' || ch === '\r') {
+      if (commas > 0 || semicolons > 0) break; // first non-empty line seen
+    }
+  }
+  return commas > semicolons ? ',' : ';';
+}
+
 export interface Sections {
   summaryHeader: string[];
   summaryValues: string[][];

@@ -94,6 +94,22 @@ h2 {
   cursor: pointer;
 }
 
+/* Secondary, optional zone (Shopify order export) reads as less prominent. */
+.dropzone.optional {
+  padding: 1.25rem 1rem;
+  border-style: dotted;
+}
+
+.dropzone.optional strong {
+  font-weight: 600;
+}
+
+.dropzone-help {
+  margin: 0.4rem 0 0;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
 .dropzone:hover,
 .dropzone.dragover,
 .dropzone:focus-within {

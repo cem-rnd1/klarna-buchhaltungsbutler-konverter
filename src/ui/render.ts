@@ -1,6 +1,7 @@
 // HTML-string view helpers. No state — pure functions from data to markup.
 
 import { formatCentsEur } from '../core/money.ts';
+import type { ShopifyFileResult } from '../core/shopify.ts';
 import type { ConversionResult, OutputRow, Payout } from '../core/transform.ts';
 import { formatCents } from '../core/money.ts';
 import type { Issue } from '../core/validate.ts';
@@ -34,6 +35,24 @@ export function renderFileList(
         <span class="file-name">${e(f.file.fileName)}</span>
         <span class="file-meta">${e(ui.payoutCount(f.file.payouts.length))}</span>
         <button class="link" type="button" data-remove="${fileIds[i]}">${e(ui.removeFile)}</button>
+        ${errors.map((err) => `<span class="file-error">${e(err.messageDe)}</span>`).join('')}
+      </li>`;
+    })
+    .join('');
+}
+
+export function renderShopifyFileList(files: ShopifyFileResult[], fileIds: number[]): string {
+  return files
+    .map((f, i) => {
+      const errors = f.issues.filter((iss) => iss.severity === 'error');
+      const status = errors.length > 0 ? 'error' : 'ok';
+      const icon = status === 'error' ? '✗' : '✓';
+      const statusText = status === 'error' ? 'Fehler' : 'OK';
+      return `<li>
+        <span class="file-status ${status}" title="${statusText}">${icon}</span>
+        <span class="file-name">${e(f.fileName)}</span>
+        <span class="file-meta">${e(ui.shopifyOrderCount(f.orderCount))}</span>
+        <button class="link" type="button" data-remove-shopify="${fileIds[i]}">${e(ui.removeFile)}</button>
         ${errors.map((err) => `<span class="file-error">${e(err.messageDe)}</span>`).join('')}
       </li>`;
     })

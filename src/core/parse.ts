@@ -23,6 +23,12 @@ export interface TransactionRow {
   amountCents: number;
   orderId: string;
   merchantReference1: string;
+  /**
+   * Only used for the optional Shopify matching (§4.5) — its content is swapped
+   * with reference1 in some exports (§3.4). Read silently: a missing column is
+   * not worth a warning, since it never affects the output on its own.
+   */
+  merchantReference2: string;
   postingCurrency: string;
   lineNumber: number;
 }
@@ -195,6 +201,7 @@ export function parseSettlementFile(bytes: Uint8Array, fileName: string): Settle
           amountCents: parseAmount(get(row, txMap, 'amount'), line, decimalSep),
           orderId: get(row, txMap, 'order_id'),
           merchantReference1: get(row, txMap, 'merchant_reference1'),
+          merchantReference2: get(row, txMap, 'merchant_reference2'),
           postingCurrency: get(row, txMap, 'posting_currency') || 'EUR',
           lineNumber: line,
         });
