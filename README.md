@@ -25,8 +25,8 @@ Buchungen bitte prüfen.
 - Sicherheitsnetz: Pro Auszahlung müssen sich alle Zeilen exakt auf 0,00 € saldieren,
   sonst wird der Download blockiert (mit explizitem Override).
 
-Die vollständige Spezifikation steht in [SPEC.md](SPEC.md), die zugrunde liegende
-offizielle Anleitung in [docs/klarna-import-anleitung.md](docs/klarna-import-anleitung.md).
+Die zugrunde liegende offizielle Anleitung steht in
+[docs/klarna-import-anleitung.md](docs/klarna-import-anleitung.md).
 
 ## Entwicklung
 
@@ -39,7 +39,8 @@ npm run build    # Typecheck + Produktions-Build nach dist/
 
 Stack: Vite + TypeScript, kein UI-Framework, keine Runtime-Dependencies.
 `src/core/` ist reine, DOM-freie Logik und vollständig getestet;
-`samples/` enthält echte, anonymisierte Exporte als Ground Truth.
+`samples/` enthält synthetische Beispiel-Exporte, die die Struktur echter
+Klarna-Reports exakt nachbilden (keine echten Geschäftsdaten).
 
 ## Veröffentlichung
 

@@ -1,0 +1,6 @@
+payout_date;total_settlement_amount;total_fee_amount;total_commission_amount;total_tax_amount;payment_reference
+"04.06.2026";"144,00";"-5,00";"0,00";"-1,00";"910000002"
+payout_date;type;payment_reference;settlement_merchant_id;order_id;merchant_reference1;merchant_reference2;amount;posting_currency;refund_id;merchant_refund_reference;merchant_capture_reference
+"04.06.2026";"FEE";"910000002";"K1234567";"00000000-0000-4000-8000-000000000201";"rSynthPay0000000000000201";"gid://shopify/PaymentSession/rSynthPay0000000000000201";"-0,35";"EUR";"";"";"gid://shopify/PaymentSession/rSynthPay0000000000000201"
+"04.06.2026";"FEE";"910000002";"K1234567";"00000000-0000-4000-8000-000000000201";"rSynthPay0000000000000201";"gid://shopify/PaymentSession/rSynthPay0000000000000201";"-4,65";"EUR";"";"";"gid://shopify/PaymentSession/rSynthPay0000000000000201"
+"04.06.2026";"SALE";"910000002";"K1234567";"00000000-0000-4000-8000-000000000201";"rSynthPay0000000000000201";"gid://shopify/PaymentSession/rSynthPay0000000000000201";"150,00";"EUR";"";"";"gid://shopify/PaymentSession/rSynthPay0000000000000201"

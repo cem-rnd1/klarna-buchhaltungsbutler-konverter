@@ -3,3 +3,9 @@ dist/
 .DS_Store
 *.local
 .claude/
+
+# Interne Dateien — bleiben lokal, nicht im öffentlichen Repo
+CLAUDE.md
+SPEC.md
+LEARNINGS.md
+samples/real/
