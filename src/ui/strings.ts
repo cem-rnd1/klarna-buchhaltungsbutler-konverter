@@ -36,6 +36,11 @@ export const issueMessages = {
       p.diffCents,
     )} statt 0,00 €. Mögliche Ursachen: falsche Vorzeichen-Einstellung im Klarna-Bericht, fehlende Zeilen oder Abweichungen bei Ratenzahlung.`,
 
+  open_balance: (p: { ref: string; amountCents: number }) =>
+    `Auszahlung „${p.ref}“ wurde mit 0,00 € abgerechnet, die Zeilen ergeben aber ${formatCentsEur(
+      p.amountCents,
+    )} – Klarna hatte nichts zum Verrechnen und hat nichts ausgezahlt. Dieser Betrag bleibt als offener Saldo auf dem Klarna-Konto in BuchhaltungsButler stehen, bis Klarna ihn einzieht (Lastschrift, Rechnung oder Abzug von einer späteren Auszahlung). Eine Zeile „Auszahlung“ wird für diese Abrechnung nicht erzeugt.`,
+
   non_eur_currency: (p: { ref: string; currencies: string }) =>
     `Auszahlung „${p.ref}“ enthält Zeilen in anderer Währung als EUR (${p.currencies}). Beträge werden nicht umgerechnet – bitte prüfen.`,
 
@@ -59,7 +64,7 @@ export const issueMessages = {
     `Optionale Spalte „${p.column}“ fehlt – ${p.effect}.`,
 
   shopify_unmatched: (p: { count: number; total: number }) =>
-    `${p.count} von ${p.total} Transaktionszeile(n) konnten keiner Shopify-Bestellung zugeordnet werden – dort bleiben Buchungstext und Empfänger/Zahlungspflichtiger wie von Klarna geliefert. Häufigste Ursache: Der Bestellexport deckt einen anderen Zeitraum ab als der Klarna-Bericht.`,
+    `${p.count} von ${p.total} Transaktionszeile(n) konnten keiner Shopify-Bestellung zugeordnet werden – dort bleiben Buchungstext und Empfänger/Zahlungspflichtiger wie von Klarna geliefert. Häufigste Ursache: Der Bestellexport beginnt zu spät – Klarna-Auszahlungen enthalten oft Bestellungen aus den Wochen davor. Exportieren Sie die Shopify-Bestellungen am besten ab ein bis zwei Monate vor Beginn des Klarna-Zeitraums.`,
 
   shopify_unusable_file: () =>
     'Diese Datei sieht nicht wie ein Shopify-Bestellexport aus – es fehlen die Spalte „Name“ und/oder die Zahlungsreferenz-Spalten („Payment Reference“, „Payment ID“, „Payment References“). Die Datei wird für die Zuordnung ignoriert.',
@@ -114,6 +119,7 @@ export const ui = {
   cardBalance: 'Summenprüfung',
   balanceOk: '✓ 0,00 €',
   balanceFail: (diff: string) => `✗ Differenz ${diff}`,
+  balanceOpen: (amount: string) => `⚠ offener Saldo ${amount}`,
 
   taxNoticeTitle: 'Hinweis: Umsatzsteuer auf Klarna-Gebühren',
   taxNotice: (refs: string) =>
@@ -210,8 +216,10 @@ export const helpHtml = {
     <ol>
       <li>Im Shopify-Adminbereich: <strong>Bestellungen&nbsp;→&nbsp;Exportieren</strong>.</li>
       <li>
-        Zeitraum passend zum Klarna-Bericht wählen (z.&nbsp;B. „Bestellungen nach Datum“) und
-        <strong>CSV für Excel, Numbers und andere Tabellenprogramme</strong> exportieren.
+        Zeitraum wählen (z.&nbsp;B. „Bestellungen nach Datum“): bis zum Ende des Klarna-Zeitraums,
+        aber <strong>ein bis zwei Monate früher beginnend</strong> – Klarna-Auszahlungen enthalten
+        oft Bestellungen aus den Wochen davor. Dann <strong>CSV für Excel, Numbers und andere
+        Tabellenprogramme</strong> exportieren.
       </li>
       <li>
         Die benötigten Spalten (<code>Name</code>, <code>Billing Name</code>,
@@ -295,6 +303,11 @@ export const helpHtml = {
         Summenprüfung fehl oder enthält der Bericht Fremdwährungen bzw. unerwartete Vorzeichen,
         wird der Download blockiert, bis Sie die Warnungen geprüft und „trotzdem exportieren“
         bestätigt haben. So landen keine stillen Fehler in Ihrer Buchhaltung.
+      </p>
+      <p>
+        Ausnahme: Rechnet Klarna eine Auszahlung mit 0,00&nbsp;€ ab, obwohl die Zeilen negativ
+        ergeben (z.&nbsp;B. eine Erstattung ohne Verkäufe zum Verrechnen), ist das kein Fehler,
+        sondern ein offener Saldo gegenüber Klarna. Das Tool weist darauf hin, blockiert aber nicht.
       </p>
     </details>
     <details>

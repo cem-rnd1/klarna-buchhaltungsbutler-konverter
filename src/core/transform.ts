@@ -10,7 +10,7 @@ import {
   type ShopifyFileResult,
   type ShopifyIndex,
 } from './shopify.ts';
-import { makeIssue, validatePayout, type Issue } from './validate.ts';
+import { makeIssue, openBalanceCents, validatePayout, type Issue } from './validate.ts';
 
 export interface OutputRow {
   datum: string;
@@ -38,6 +38,8 @@ export interface Payout {
   shopifyUnmatched: number;
   outputRows: OutputRow[];
   balanceCents: number;
+  /** §6.1.1: shortfall left open on the Klarna account (negative), else 0. */
+  openBalanceCents: number;
   issues: Issue[];
 }
 
@@ -118,9 +120,15 @@ function transformPayout(
   if (summary.commissionCents !== 0) {
     outputRows.push(generated('Kommissionen', 'Klarna Kommissionen', summary.commissionCents));
   }
-  outputRows.push(generated('Auszahlung', 'Klarna Auszahlung', -Math.abs(summary.settlementCents)));
+  // A payout of exactly 0 moved no money — and BuchhaltungsButler rejects 0-rows.
+  if (summary.settlementCents !== 0) {
+    outputRows.push(generated('Auszahlung', 'Klarna Auszahlung', -Math.abs(summary.settlementCents)));
+  }
 
-  issues.push(...validatePayout(summary.paymentReference, outputRows, fileName));
+  issues.push(
+    ...validatePayout(summary.paymentReference, outputRows, summary.settlementCents, fileName),
+  );
+  const balanceCents = outputRows.reduce((sum, r) => sum + r.betragCents, 0);
 
   return {
     fileName,
@@ -134,7 +142,8 @@ function transformPayout(
     transactionCount: kept.length,
     shopifyUnmatched,
     outputRows,
-    balanceCents: outputRows.reduce((sum, r) => sum + r.betragCents, 0),
+    balanceCents,
+    openBalanceCents: openBalanceCents(summary.settlementCents, balanceCents),
     issues,
   };
 }

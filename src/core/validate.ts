@@ -25,6 +25,15 @@ export function makeIssue<C extends IssueCode>(
 }
 
 /**
+ * §6.1.1: a payout of exactly 0 whose rows net negative is Klarna withholding
+ * nothing because there was nothing to pay out — the shortfall stays open on
+ * the Klarna account. Returns that open balance (negative), else 0.
+ */
+export function openBalanceCents(settlementCents: number, balanceCents: number): number {
+  return settlementCents === 0 && balanceCents < 0 ? balanceCents : 0;
+}
+
+/**
  * §6.1 zero-sum balance check plus §6.2 row-level blocking checks
  * (non-EUR currency, positive Gebühren/Kommissionen), all computable from the
  * final output rows of one payout.
@@ -32,13 +41,17 @@ export function makeIssue<C extends IssueCode>(
 export function validatePayout(
   paymentReference: string,
   outputRows: OutputRow[],
+  settlementCents: number,
   fileName: string,
 ): Issue[] {
   const issues: Issue[] = [];
   const scope = { fileName, paymentReference };
 
   const balance = outputRows.reduce((sum, r) => sum + r.betragCents, 0);
-  if (balance !== 0) {
+  const open = openBalanceCents(settlementCents, balance);
+  if (open !== 0) {
+    issues.push(makeIssue('info', 'open_balance', { ref: paymentReference, amountCents: open }, scope));
+  } else if (balance !== 0) {
     issues.push(
       makeIssue('blocking', 'balance_mismatch', { ref: paymentReference, diffCents: balance }, scope),
     );

@@ -413,6 +413,51 @@ describe('validation (§6)', () => {
     expect(r.payouts[0].balanceCents).toBe(500);
   });
 
+  it('treats a 0,00 payout with a negative net as an open balance, not a mismatch (§6.1.1)', () => {
+    // a lone RETURN with nothing to offset: Klarna pays out 0 and keeps the claim open
+    const r = convert([
+      {
+        name: 'a.csv',
+        content: file([
+          SUMMARY_HEADER,
+          '17.09.2026;0,00;0,00;0,00;0,00;R1',
+          TX_HEADER,
+          '17.09.2026;RETURN;R1;o1;m1;-229,00;EUR',
+        ]),
+      },
+    ]);
+    expect(issueCodes(r)).toEqual(['open_balance']);
+    const issue = r.issues[0];
+    expect(issue.severity).toBe('info');
+    expect(issue.messageDe).toContain('-229,00 €');
+    // no 0,00 Auszahlung row — BuchhaltungsButler rejects 0-amount rows
+    expect(r.payouts[0].outputRows.map((row) => row.auftragsart)).toEqual(['RETURN']);
+    expect(r.payouts[0].balanceCents).toBe(-22900);
+    expect(r.payouts[0].openBalanceCents).toBe(-22900);
+    expect(rowsOf(r.csv)).toEqual([
+      ['Datum', 'Auftragsart', 'Zahlungsreferenz', 'Buchungstext', 'Empfänger/Zahlungspflichtiger', 'Betrag', 'Währung'],
+      ['17.09.2026', 'RETURN', 'R1', 'o1', 'm1', '-229,00', 'EUR'],
+    ]);
+  });
+
+  it('keeps a positive net on a 0,00 payout blocking', () => {
+    // Klarna owing money but paying out nothing is not a carry-over — something is wrong
+    const r = convert([
+      {
+        name: 'a.csv',
+        content: file([
+          SUMMARY_HEADER,
+          '01.01.2026;0,00;0,00;0,00;0,00;R1',
+          TX_HEADER,
+          '01.01.2026;SALE;R1;o1;m1;50,00;EUR',
+        ]),
+      },
+    ]);
+    expect(issueCodes(r)).toEqual(['balance_mismatch']);
+    expect(r.issues[0].severity).toBe('blocking');
+    expect(r.payouts[0].openBalanceCents).toBe(0);
+  });
+
   it('flags non-EUR rows as blocking', () => {
     const r = convert([
       {

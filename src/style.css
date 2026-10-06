@@ -9,6 +9,7 @@
   --ok: #1a7f37;
   --warn-bg: #fff3cd;
   --warn-border: #d4a72c;
+  --warn-text: #8a5a00;
   --error: #b42318;
   --error-bg: #fdecea;
   --info-bg: #e8f1fd;
@@ -242,6 +243,11 @@ button.link {
 
 .balance-fail {
   color: var(--error);
+  font-weight: 700;
+}
+
+.balance-open {
+  color: var(--warn-text);
   font-weight: 700;
 }
 

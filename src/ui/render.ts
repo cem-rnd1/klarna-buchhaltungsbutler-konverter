@@ -65,7 +65,9 @@ export function renderPayoutCards(payouts: Payout[]): string {
       const balance =
         p.balanceCents === 0
           ? `<span class="balance-ok">${e(ui.balanceOk)}</span>`
-          : `<span class="balance-fail">${e(ui.balanceFail(formatCentsEur(p.balanceCents)))}</span>`;
+          : p.openBalanceCents !== 0
+            ? `<span class="balance-open">${e(ui.balanceOpen(formatCentsEur(p.openBalanceCents)))}</span>`
+            : `<span class="balance-fail">${e(ui.balanceFail(formatCentsEur(p.balanceCents)))}</span>`;
       const feeLabel = p.taxMerged ? ui.cardFeesWithTax : ui.cardFees;
       const feeCents = p.feeCents + p.taxCents;
       return `<div class="card">
